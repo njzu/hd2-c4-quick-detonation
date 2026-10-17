@@ -4,7 +4,7 @@ C4 Quick Detonation，当前版本 **1.0.0-rc1**。保留游戏原生左键投�
 
 ## 下载和安装
 
-在本仓库 **Releases** 下载 `C4快速引爆-1.0.0-rc1-Release.zip`，通过 HD2 Mod Manager 导入、启用并部署。需要 Bingus Shared Loader v17 或更新版本。先停用参考版以及 M1/M1.2/M1.3 等旧 C4 控制器。
+在本仓库 **Releases** 下载 [`HD2-C4-v1.0.0-rc1-Release.zip`](https://github.com/njzu/hd2-c4-quick-detonation/releases/download/v1.0.0-rc1/HD2-C4-v1.0.0-rc1-Release.zip)，通过 HD2 Mod Manager 导入、启用并部署。需要 Bingus Shared Loader v17 或更新版本。先停用参考版以及 M1/M1.2/M1.3 等旧 C4 控制器。
 
 使用默认左/右鼠标绑定。拿出 C4、完成装备动作并松开双键后接管；模式偏离时会在空闲双键释放期间自动校正 DEPLOY。切枪过渡阶段取消尚未提交的引爆。
 
