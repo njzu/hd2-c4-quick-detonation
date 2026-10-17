@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.log
+*.dll
+*.exe
+.env
+.env.*
+**/private/
+**/vendor/
+**/recordings/
+work/*
+!work/日用版源码/
+!work/上游源码/
+*.zip

@@ -1,0 +1,34 @@
+{
+  "passed": true,
+  "request_assertions": 25,
+  "target_reader_assertions": 8,
+  "entry_assertions": {
+    "False": 39,
+    "True": 38
+  },
+  "fast_reader": {
+    "assertions": 21,
+    "full_fast_walk_reads": 85,
+    "idle_cache_validation_reads": 27
+  },
+  "aim_reuse": {
+    "assertions": 15,
+    "m12_held_reads_per_phase": 11.0,
+    "m13_held_reads_per_phase": 5.05,
+    "held_reuses": 119
+  },
+  "resolver_assertions": 9,
+  "instance_writer_and_mode_assertions": 10,
+  "diagnostic_metrics_assertions": 5,
+  "compile_game_luajit": [
+    "Release",
+    "Diagnostic"
+  ],
+  "release_heavy_diagnostics_absent": true,
+  "windows_own_buffer_write_test": true,
+  "release_log_roundtrip_and_once": true,
+  "game_process_modified": false,
+  "game_native_actions_executed": false,
+  "gameplay_verified": false,
+  "multiplayer_verified": false
+}

@@ -1,0 +1,26 @@
+{
+  "Release": {
+    "file": "C4快速引爆-1.0.0-rc1-Release.zip",
+    "sha256": "63A6CB15F4B5A43C0D8719163B28174E017DF0A08EAFAF2C5702A4E58FA97B86",
+    "lua_bytes": 219109
+  },
+  "Diagnostic": {
+    "file": "诊断构建/C4快速引爆-1.0.0-rc1-Diagnostic.zip",
+    "sha256": "154BFA971BF531925CEF58460D6B8BE7F68D9161803975A5F73B91E1F3AA48D9",
+    "lua_bytes": 221532
+  },
+  "Source": {
+    "file": "C4快速引爆-1.0.0-rc1-源码.zip",
+    "sha256": "7FF683130F490615B1C6A612061D25BB00E7F67F0EED0E5B281229DC70CAB118"
+  },
+  "version": "1.0.0-rc1",
+  "native_nodes": 32,
+  "contact_nodes": 5,
+  "optional_action_nodes": 18,
+  "plan_v4_sha256": "F6BC57806E32A8DB5EB1C9EA06B967123C7FB2E5BCBFBAAE522B8913DC5647D1",
+  "deployed": false,
+  "live_acceptance": false,
+  "auto_mode": "guarded_instance_word_pending_live",
+  "feedback": "strict_idle520_busy_remote_pending_live",
+  "transition": "conservative_bit111_current_layout"
+}

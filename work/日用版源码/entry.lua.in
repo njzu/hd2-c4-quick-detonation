@@ -1,0 +1,220 @@
+-- HD2-Addon: mods/zj/c4_quick_daily
+local existing=rawget(_G,'HD2C4Daily');if existing then return existing end
+local M={version='1.0.0-rc1',disabled=false,status='starting'};rawset(_G,'HD2C4Daily',M)
+local DIAGNOSTICS=@@DIAGNOSTICS@@
+local R,D,C
+@@MODULES@@
+local Catalog=@@NATIVE@@
+local ContactCatalog=@@CONTACT@@
+local ActionCatalog=@@ACTION@@
+local loader=rawget(_G,'CowboyBingusModLoader');local engine=rawget(_G,'stingray')
+local original=rawget(_G,'update')
+if type(loader)~='table'or loader.api~=1 or type(loader.open_log)~='function'or type(engine)~='table'or type(original)~='function'then
+    M.disabled=true;M.status='unsupported_runtime';return M end
+local ffi=require('ffi');local bit=require('bit')
+local api,game,compat,contact,action,cache,aim,mode,requests,guard,focus,user,native,log,metrics
+local latest_row,left_before,right_before={},false,false
+local frame,now,frame_cost=0,0,0
+local identity_serial,last_native_identity,last_world=0,nil,nil
+local transaction
+local function record(kind,fields)
+    if log and not M.logging_error then local ok,why=pcall(log.once,kind,fields);if not ok then M.logging_error=tostring(why)end end
+end
+local function diagnostic(kind,fields)
+    if DIAGNOSTICS and not M.logging_error then fields=fields or {};fields.frame_id=frame;fields.time=now
+        local ok,why=pcall(log.event,kind,fields);if not ok then M.logging_error=tostring(why)end
+    end
+end
+local function timed(name,fn,...)
+    if not DIAGNOSTICS then return fn(...)end
+    local at=metrics.clock()
+    local function done(ok,...)
+        metrics.stage(name,metrics.clock()-at);if not ok then error((...),0)end;return ...
+    end
+    return done(pcall(fn,...))
+end
+local function invalidate()
+    if cache then cache.invalidate()end;if aim then aim.invalidate()end
+    if api and api.memo_reset then api.memo_reset()end
+end
+local function cleanup()
+    if not aim then return true end
+    local ok,why=pcall(aim.stop)
+    if not ok then M.restore_pending=tostring(why);record('restore_pending',{reason=M.restore_pending});return false end
+    M.restore_pending=nil;return true
+end
+local function cancel(reason)
+    if transaction then diagnostic('native520_observation_cancelled',{request_id=transaction.id,reason=reason,result='OUTCOME_UNKNOWN_NO_RETRY'});transaction=nil end
+    if requests then requests.cancel(reason)end;cleanup()
+end
+local function fail(reason)
+    M.disabled=true;M.status=tostring(reason)
+    if requests then requests.fail(M.status)end
+    cleanup();record('fault',{reason=M.status,result='NO_AUTOMATIC_RETRY'})
+end
+local function input()
+    local l=bit.band(tonumber(user.c4daily_GetAsyncKeyState(1)),0x8000)~=0
+    local r=bit.band(tonumber(user.c4daily_GetAsyncKeyState(2)),0x8000)~=0
+    local i={left=l,right=r,left_edge=l and not left_before,right_edge=r and not right_before}
+    if DIAGNOSTICS and(l~=left_before or r~=right_before)then diagnostic('input',i)end
+    left_before,right_before=l,r;return i
+end
+local function validate(cap,allow_one)return FastReader.validate(api,game,ContextReader,cap,allow_one)end
+local function context(i)
+    local ok,row,why,cap=pcall(function()return timed('context',cache.snapshot)end)
+    if not ok then why=row;row=nil;cap=nil end
+    latest_row=row or {}
+    local world=engine.Application.main_world()
+    local allowed=guard.sample(focus(),false,not i.left and not i.right)
+    if not allowed or not cap or not cap.scope or not world then cancel(not allowed and'FOCUS_OR_UI'or cap and cap.cancel or tostring(why or'NO_LOCAL_C4'));return end
+    if not cap.operable then cancel('EQUIPMENT_TRANSITION');return end
+    cap.native_identity=cap.native_identity or cap.identity
+    if cap.native_identity~=last_native_identity or world~=last_world then
+        identity_serial=identity_serial+1;last_native_identity=cap.native_identity;last_world=world
+    end
+    cap.identity=identity_serial;cap.world=world
+    if transaction and transaction.identity~=cap.identity then transaction=nil end
+    local ready,reason=timed('mode',mode.ready,cap,i)
+    if not ready then cancel(reason);M.status=reason;return end
+    cap.aim_owned=timed('aim',aim.sync,cap,true,not i.left and not i.right)
+    M.status=cap.aim_owned and'ready'or'WAIT_RELEASE';return cap
+end
+local function targets(ctx)
+    local before=api.read_count
+    local ok,result=pcall(function()return timed('target',RemoteReader.capture,api,game,ContextReader,ctx)end)
+    local reads=api.read_count-before
+    if not ok then requests.drop('TARGET_VALIDATION_FAILED');diagnostic('target_rejected',{reason=tostring(result)});return nil,reads end
+    if DIAGNOSTICS then diagnostic('targets',{owned=#result.all,eligible=#result.eligible})end
+    return result,reads
+end
+local function monitor_transaction(ctx)
+    local t=transaction;if not t then return false end
+    if not ctx or t.identity~=ctx.identity then transaction=nil;return false end
+    if ctx.active and ctx.ability==520 then t.seen=true end
+    if t.seen and(not ctx.active or ctx.ability~=520)then
+        diagnostic('native520_finished',{request_id=t.id,result='NATIVE_LIFECYCLE_ENDED_NOT_EXPLOSION_PROOF'});transaction=nil
+        requests.armed=false;return false
+    end
+    if now-t.at>(t.seen and 8 or .5)then error('NATIVE520_COMPLETION_UNKNOWN_NO_FALLBACK')end
+    requests.drop('NATIVE520_TRANSACTION_BUSY');requests.armed=false;return true
+end
+local function update_requests(ctx,i,phase)
+    if not ctx then return false end
+    if monitor_transaction(ctx)then return false end
+    if not requests.observe(ctx,now,frame,phase)then return false end
+    requests.input(ctx,i,now,frame);return true
+end
+local function conflicts()
+    for _,key in ipairs({'HD2C4M1','HD2C4BoundaryProbe','HD2C4RemoteM12','HD2C4RemoteM13','HD2C4QuickActions'})do
+        assert(not rawget(_G,key),'DISABLE_OLD_C4_ADDON:'..key)
+    end
+end
+local function before()
+    frame=frame+1;now=api.time();conflicts();api.memo_begin();cache.begin_phase()
+    local i=input();local ctx=context(i)
+    if update_requests(ctx,i,'before')and ctx.aim_owned and(i.left_edge or requests.new_epoch and requests.throw and not requests.throw.released and not requests.throw.baseline)then
+        local t=targets(ctx);if t then requests.baseline(t.set,frame)end
+    end
+end
+local function after()
+    now=api.time();api.memo_begin();cache.begin_phase()
+    local i=input();local ctx=context(i)
+    if not update_requests(ctx,i,'after')then return end
+    if requests.new_epoch and requests.throw and not requests.throw.released and not requests.throw.baseline then
+        local t=targets(ctx);if t then requests.baseline(t.set,frame)end
+    end
+    if not requests.pending or not requests.can_read()then return end
+    local t,reads=targets(ctx);if not t or not requests.targets(t,reads)then return end
+    local chosen,idle='REMOTE',nil
+    if action and not ctx.active and not ctx.avatar_active and ctx.standing and not ctx.veto and not i.left then
+        local ok,candidate=pcall(Idle520.capture,api,game,ContextReader,ctx)
+        if ok and candidate then validate(ctx,false);chosen='NATIVE_520';idle=candidate end
+    end
+    local final=input()
+    if final.left_edge then requests.drop('NEW_LEFT_BEFORE_COMMIT');return end
+    if engine.Application.main_world()~=ctx.world or not focus()or not guard.sample(true,false,not final.left and not final.right)then cancel('FINAL_SCOPE_CHANGED');return end
+    local operable,reason=FastReader.live_operable(api,ctx)
+    if not operable then cancel(reason);return end
+    if api.read(ctx.mode.at,4)~=ctx.mode.bytes then cancel('MODE_CHANGED_BEFORE_COMMIT');return end
+    timed('guard',contact.verify)
+    if chosen=='NATIVE_520'then timed('guard',action.verify);assert(idle.same(),'idle520_commit_changed')end
+    assert(ctx.same()and t.same()and aim.valid(ctx),'FINAL_CAPABILITY_CHANGED')
+    if not requests.commit_ready(api.time())then return end
+    local p=requests.submitted(chosen);invalidate()
+    diagnostic('dispatch',{request_id=p.id,path=chosen,eligible=#t.eligible,weapon_id=ctx.weapon_id})
+    if chosen=='NATIVE_520'then
+        transaction={id=p.id,identity=ctx.identity,at=now,seen=false}
+        timed('native520',native.start520,idle.manager,ctx.weapon_id)
+    else timed('remote',native.remote,t.manager,ctx.weapon_id)end
+    -- No post-action evidence scan, no fallback on missing statistics.
+end
+local ok,why=pcall(function()
+    log=SessionLog.new(loader,DIAGNOSTICS)
+    api=WindowsRead();local read=api.read;api.read_count=0
+    api.read=function(at,n)api.read_count=api.read_count+1;return read(at,n)end
+    ReadMemo(api);game=assert(api.module('game.dll'),'game_module_missing')
+    if DIAGNOSTICS then metrics=Metrics.new(log,api)end
+    local scan=NativeResolver.new_scan(api,game)
+    local success,err=pcall(function()
+        compat=NativeResolver.resolve(api,game,Catalog,scan);contact=NativeResolver.resolve(api,game,ContactCatalog,scan)
+        R,D,C=compat.symbols,compat.fields,contact.symbols
+        local action_ok,res=pcall(NativeResolver.resolve,api,game,ActionCatalog,scan)
+        if action_ok and res.symbols.fn_detonate_lifecycle==C.contact_remote_lifecycle then
+            for name,value in pairs(res.symbols)do assert(not R[name]or R[name]==value,'action_symbol_conflict');R[name]=value end
+            action=res
+        else record('feedback_unavailable',{reason=action_ok and'LIFECYCLE_LINK_MISMATCH'or tostring(res)})end
+    end)
+    scan.release();if not success then error(err,0)end
+    ContextReader.diagnostics=false
+    cache=SnapshotCache.new(function()
+        local row,why,cap,same=FastReader.snapshot(api,game,ContextReader)
+        if cap then cap.native_identity=cap.identity end;return row,why,cap,same
+    end)
+    ffi.cdef[[int16_t c4daily_GetAsyncKeyState(int) __asm__("GetAsyncKeyState");]]
+    user=ffi.load('user32');focus=WindowFocus()
+    guard=GameplayGuard.new(engine,DIAGNOSTICS and diagnostic or nil,NativeUiGuard.new(api,game,ContextReader,function()return latest_row end),{diagnostics=false})
+    local remote=ffi.cast('void (*)(void *, uint32_t)',game+C.contact_remote_owner)
+    local inhibit=ffi.cast('void (*)(void *, uint64_t, uint32_t, float)',game+R.fn_input_inhibit)
+    local unblock=ffi.cast('void (*)(void *, uint64_t)',game+R.fn_input_unblock)
+    native={remote=function(manager,id)remote(ffi.cast('void *',manager),id)end,
+        inhibit=function(manager,key)inhibit(ffi.cast('void *',manager),key,1,-1)end,
+        unblock=function(manager,key)unblock(ffi.cast('void *',manager),key)end}
+    if action then
+        local start=ffi.cast('void (*)(void *, uint32_t, uint32_t, uint32_t, float)',game+R.fn_start)
+        native.start520=function(manager,id)start(ffi.cast('void *',manager),id,520,1,1)end
+    end
+    local function verify(name)return compat.verifier_for(name)()end
+    mode=ModeControl.new(InstanceWrite.new(api),validate,function()verify('fn_weapon_functions')end,invalidate,DIAGNOSTICS and diagnostic or nil)
+    aim=RemoteAim.new(api,game,ContextReader,native,verify,validate,DIAGNOSTICS and diagnostic or nil,invalidate,api.time)
+    requests=Requests.new(DIAGNOSTICS and diagnostic or nil);M.requests=requests;M.mode=mode;M.aim=aim
+    conflicts();record('startup',{version=M.version,diagnostic=DIAGNOSTICS,feedback=action and'IDLE520_BUSY_REMOTE'or'REMOTE_ONLY',
+        auto_deploy='GUARDED_PRIVATE_INSTANCE_WORD',transition_gate='CURRENT_LAYOUT_BIT111',live_acceptance='PENDING'})
+end)
+if not ok then fail(why);return M end
+M.status='WAIT_RELEASE'
+local function endphase()if cache then cache.end_phase()end;if api and api.memo_end then api.memo_end()end end
+local function finish(called,...)
+    if not called then fail('original_update_error:'..tostring((...)));error((...),0)end
+    if not M.disabled then
+        local at=DIAGNOSTICS and metrics.clock();local success,why=pcall(after);endphase()
+        if DIAGNOSTICS then frame_cost=frame_cost+metrics.clock()-at end
+        if not success then fail(why)end
+    else cleanup()end
+    if DIAGNOSTICS and metrics then metrics.frame(frame,frame_cost)end
+    return ...
+end
+update=function(dt,...)
+    frame_cost=0
+    if not M.disabled then
+        local at=DIAGNOSTICS and metrics.clock();local success,why=pcall(before);endphase()
+        if DIAGNOSTICS then frame_cost=metrics.clock()-at end
+        if not success then fail(why)end
+    else cleanup()end
+    return finish(pcall(original,dt,...))
+end
+local old_shutdown=rawget(_G,'shutdown')
+shutdown=function(...)
+    M.disabled=true;cleanup();M.status='closed';if log then record('shutdown',{restore_pending=M.restore_pending});pcall(log.close)end
+    if old_shutdown then return old_shutdown(...)end
+end
+return M
