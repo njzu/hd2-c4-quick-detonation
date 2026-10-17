@@ -1,45 +1,38 @@
-# 绝地潜兵 2：C4 快速引爆
+# C4 快速引爆 · 绝地潜兵 2
 
-C4 Quick Detonation，当前版本 **1.0.0-rc1**。保留游戏原生左键投掷、扣弹和装填，右键远程引爆。
+**左键投掷，右键引爆。** 让 C4 的操作更直接，在投掷后或装填期间也能发起引爆，无需来回切换操作模式。
 
-## 下载和安装
+## 功能
 
-在本仓库 **Releases** 下载 [`HD2-C4-v1.0.0-rc1-Release.zip`](https://github.com/njzu/hd2-c4-quick-detonation/releases/download/v1.0.0-rc1/HD2-C4-v1.0.0-rc1-Release.zip)，通过 HD2 Mod Manager 导入、启用并部署。需要 Bingus Shared Loader v17 或更新版本。先停用参考版以及 M1/M1.2/M1.3 等旧 C4 控制器。
+- **左投右爆**：左键投掷 C4，右键引爆已放置的 C4。
+- **快速引爆**：投掷出手后和装填期间仍可使用右键。
+- **自动投掷模式**：拿稳 C4 并松开双键后，自动调整为投掷模式。
+- **切枪保护**：装备切换期间暂停引爆，切回 C4 后松键即可恢复。
+- **按压反馈**：站立空闲时使用原生引爆动作；投掷或装填期间优先快速引爆，暂不附加按压动画。
 
-使用默认左/右鼠标绑定。拿出 C4、完成装备动作并松开双键后接管；模式偏离时会在空闲双键释放期间自动校正 DEPLOY。切枪过渡阶段取消尚未提交的引爆。
+## 下载
 
-站立空闲时仅调用原生引爆动作取得按压反馈；投掷收尾或装填期间仅走直接引爆以保留速度，此时没有额外按压动画。Diagnostic 只供故障定位，和 Release 二选一。
+[**下载 v1.0.0-rc1 安装包**](https://github.com/njzu/hd2-c4-quick-detonation/releases/download/v1.0.0-rc1/HD2-C4-v1.0.0-rc1-Release.zip) · [全部版本与源码](https://github.com/njzu/hd2-c4-quick-detonation/releases)
 
-**这是尚待实机验收的候选版。** 离线检查和独立源码复现已通过；本版本的实际动画、自动模式、切枪边界、性能、长期弹药及多人兼容性尚未验证。
+普通使用选择 **Release**。Diagnostic 用于排查问题，两者不要同时启用。
 
-- [安装与卸载](outputs/正式交付/安装与卸载.md)
-- [发布说明](outputs/正式交付/发布说明.md)
-- [短实机验收](outputs/正式交付/短实机验收.md)
-- [离线验证](outputs/正式交付/离线验证.json)
+## 安装与使用
 
-## 构建
+1. 安装 **Bingus Shared Loader v17 或更新版本**。
+2. 在 HD2 Mod Manager 中停用其他 C4 操作模组和本模组旧版，导入安装包、启用并部署。
+3. 保持默认鼠标键位，拿出 C4，等待装备完成并松开左右键。
+4. 左键投掷，右键引爆。切回 C4 或退出模式菜单后，先松开双键再操作。
 
-需要 Python 3.10 或更新版本，不依赖外部 Python 包：
+卸载时退出游戏，在管理器中停用本模组并重新部署即可。
 
-```powershell
-python -B work/日用版源码/build.py
-```
+## 使用提示
 
-输出到 `outputs/正式交付`，不会部署或启动游戏。保持现有目录结构以复用已验证的构建链。公开源码中的 native catalog 已将被 mask 忽略的字节归零；不发布原始游戏模块、进程转储或实测日志。
+当前版本为 **1.0.0-rc1 预发布版**，欢迎试用与反馈。实际动画、切枪保护、自动模式、性能和多人兼容性仍待进一步实机确认。
 
-离线回归还需 Windows x64 与本机合法安装游戏中的 LuaJIT DLL：
+暂不支持自定义鼠标绑定和载具内操作。拿出 C4 时请先松开双键，让自动模式调整完成；切枪前已发起的引爆不会因随后切枪而撤回。
 
-```powershell
-python -B work/日用版源码/check.py
-```
+遇到问题可通过仓库 **Issues** 反馈，并注明操作顺序、是否发生爆炸及使用的其他模组。
 
-`check.py` 中的 DLL 路径需按本机安装位置调整；它在隔离进程执行合成测试，不启动游戏或调用游戏原生动作。`evidence.py` 是原工作区历史审计工具，依赖未上传的旧日志和旧构建，不属于必需构建步骤。
+[本版更新](CHANGELOG.md) · [开发说明](开发说明.md) · [授权与来源](NOTICE.md)
 
-## 目录与授权
-
-- `work/日用版源码`：本候选版的逻辑、构建和回归测试。
-- `work/上游源码`：复用的基础模块、签名目录和合成测试工具。
-- `参考mod/BingusSharedLoader-main/scripts`：打包所需的 Loader 工具。
-- `outputs`：构建规格和交付说明。
-
-项目沿用 MIT License；Loader 打包工具保留其 Zero-Clause BSD License。具体归属见 [NOTICE.md](NOTICE.md) 与对应 LICENSE。此项目与游戏开发商无隶属关系。
+本项目使用 MIT License，相关工具保留原授权，详见 [LICENSE](LICENSE) 和 [NOTICE.md](NOTICE.md)。
